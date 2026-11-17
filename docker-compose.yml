@@ -1,6 +1,8 @@
-# Coolify can deploy this file as a Docker Compose service.
-# Do not publish a host port here. Set the public URL in Coolify.
-# The process listens on 0.0.0.0:7878 inside the container network.
+# Coolify can deploy this file with the Docker Compose build pack.
+# The port is published only on the host's Tailscale IPv4 (TS_BIND_IP, from
+# `tailscale ip -4`), so the dashboard is reachable over the tailnet and not
+# on the LAN or the internet. Do not attach a Coolify domain.
+# The process listens on 0.0.0.0:7878 inside the container.
 
 services:
   relaybook-dashboard:
@@ -19,8 +21,10 @@ services:
     volumes:
       - ${LEDGER_DIR}:/data/ledger:ro
       - ${CONTEXT_DIR}:/data/context:ro
-    expose:
-      - "7878"
+    ports:
+      - "${TS_BIND_IP:?set TS_BIND_IP to the host's Tailscale IPv4}:${HOST_PORT:-7878}:7878"
+    cpus: 0.5
+    mem_limit: 256m
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:7878/healthz"]
       interval: 30s
@@ -29,6 +33,3 @@ services:
       start_period: 15s
     # Optional. Use a uid that can read the mounted files.
     # user: "1000:1000"
-    # Coolify assigns the domain. Example label, unused unless you enable it there:
-    # labels:
-    #   - "coolify.service=relaybook-dashboard"

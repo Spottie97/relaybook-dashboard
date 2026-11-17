@@ -72,7 +72,7 @@ Relaybook checkpoints when a command exits, so the main database file is usually
 
 1. On the host, `LEDGER_DIR` is the directory whose children are ledgers (`ledger.db` or `.relaybook/ledger.db` in each child). `CONTEXT_DIR` is the directory of agent JSON logs. Both are mounted read-only. Do not point them at a path you cannot share with this container's user.
 2. Set `DASHBOARD_TOKEN` or both `DASHBOARD_BASIC_USER` and `DASHBOARD_BASIC_PASSWORD`.
-3. Deploy the compose file from Coolify. Give the service its public URL there. This repo does not publish a host port.
-4. Open the UI, pick a workspace, and confirm the schema line in Settings says 6. A newer ledger shows an error until the adapter grows a reader for that version.
+3. Set `TS_BIND_IP` to the host's Tailscale IPv4 and deploy the compose file from Coolify with the Docker Compose build pack. Do not attach a domain. Open `http://<tailscale-host>:7878` from a device on the tailnet.
+4. Open the UI, pick a workspace, and check the schema line in Settings. Schema 6 gets the full reader. Any other version opens in degraded mode (tasks and events only) with a banner.
 
 `--demo` builds a throwaway ledger and log set so the UI can run without those mounts. It is the only mode that starts without credentials.

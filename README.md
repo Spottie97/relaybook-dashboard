@@ -6,12 +6,13 @@ The binary, image, and compose service are all named `relaybook-dashboard`.
 
 ## Deploy on Coolify
 
-Coolify builds `Dockerfile` and runs `docker-compose.yml`. The image listens on `0.0.0.0:7878` inside the container. Leave the public URL and any host port to Coolify. The compose file does not publish a host port.
+Use Coolify's Docker Compose build pack: it builds `Dockerfile` and runs `docker-compose.yml`. The image listens on `0.0.0.0:7878` inside the container. The compose file publishes that port only on `TS_BIND_IP`, the host's Tailscale IPv4 (`tailscale ip -4`), so the dashboard is reachable over the tailnet and not on the LAN or the internet. Do not attach a Coolify domain, because the Coolify proxy listens on every interface. The service is capped at 0.5 CPU and 256 MB of memory.
 
 Set these in Coolify before the first deploy:
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
+| `TS_BIND_IP` | yes | Host Tailscale IPv4 to publish the port on. `HOST_PORT` overrides the host port (default 7878). |
 | `LEDGER_DIR` | yes | Host directory of ledgers. Each child may be a `ledger.db`, a directory containing `ledger.db`, or a project with `.relaybook/ledger.db`. |
 | `CONTEXT_DIR` | yes | Host directory of agent JSON logs. |
 | `DASHBOARD_TOKEN` | one of these | Bearer token for the UI and `/api/*`. |
