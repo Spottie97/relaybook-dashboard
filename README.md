@@ -8,6 +8,8 @@ The binary, image, and compose service are all named `relaybook-dashboard`.
 
 Use Coolify's Docker Compose build pack: it builds `Dockerfile` and runs `docker-compose.yml`. The image listens on `0.0.0.0:7878` inside the container. The compose file publishes that port on `HOST_BIND_IP` (default `0.0.0.0`, so the LAN and the tailnet can reach it). Set it to the host's Tailscale IPv4 (`tailscale ip -4`) to limit access to the tailnet. Never port-forward it to the internet. No Coolify domain is needed. The service is capped at 0.5 CPU and 256 MB of memory.
 
+Coolify reads volume paths before it substitutes variables, so `${LEDGER_DIR}` in a volume becomes an empty named volume. Point Coolify at a compose file with literal host paths instead, such as `docker-compose.coolify.yml`.
+
 Set these in Coolify before the first deploy:
 
 | Variable | Required | Purpose |

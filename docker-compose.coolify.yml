@@ -1,0 +1,37 @@
+# Coolify deployment for foodfair. Coolify reads volume paths before it
+# substitutes variables, so the host paths here are literal.
+# docker-compose.yml is the generic version.
+# The port is published on HOST_BIND_IP (default 0.0.0.0, so the office LAN
+# and the tailnet can both reach it). Set it to the host's Tailscale IPv4 to
+# limit access to the tailnet. Never port-forward it to the internet.
+# The process listens on 0.0.0.0:7878 inside the container.
+
+services:
+  relaybook-dashboard:
+    build: .
+    image: relaybook-dashboard:latest
+    restart: unless-stopped
+    environment:
+      BIND: 0.0.0.0:7878
+      LEDGER_DIR: /data/ledger
+      CONTEXT_DIR: /data/context
+      ARTIFACTS_DIR: /data/context/artifacts
+      POLL_MS: ${POLL_MS:-1500}
+      DASHBOARD_TOKEN: ${DASHBOARD_TOKEN:-}
+      DASHBOARD_BASIC_USER: ${DASHBOARD_BASIC_USER:-}
+      DASHBOARD_BASIC_PASSWORD: ${DASHBOARD_BASIC_PASSWORD:-}
+    volumes:
+      - /opt/agents-dev/data/work/ledger:/data/ledger:ro
+      - /opt/agents-dev/data/work/context:/data/context:ro
+    ports:
+      - "${HOST_BIND_IP:-0.0.0.0}:${HOST_PORT:-7878}:7878"
+    cpus: 0.5
+    mem_limit: 256m
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:7878/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    # Optional. Use a uid that can read the mounted files.
+    # user: "1000:1000"
