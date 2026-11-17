@@ -2,6 +2,14 @@ import type { ArtifactBody, Creds, Meta, NormEvent, Snapshot } from "./types";
 
 const KEY = "relaybook-dashboard-auth";
 
+let browserAuth = false;
+
+/** Basic auth is handled by the browser. Do not attach an Authorization header. */
+export function setBrowserAuth(on: boolean) {
+  browserAuth = on;
+  if (on) sessionStorage.removeItem(KEY);
+}
+
 export function loadCreds(): Creds | null {
   const raw = sessionStorage.getItem(KEY);
   if (!raw) return null;
@@ -19,6 +27,7 @@ export function saveCreds(creds: Creds | null) {
 
 export function authHeaders(): Headers {
   const headers = new Headers();
+  if (browserAuth) return headers;
   const creds = loadCreds();
   if (!creds) return headers;
   if (creds.token) headers.set("Authorization", `Bearer ${creds.token}`);
@@ -58,6 +67,9 @@ export async function openFeed(
   onLog: (event: NormEvent) => void,
   signal: AbortSignal,
 ): Promise<void> {
+  if (browserAuth) {
+    return openEventSource(onState, onLog, signal);
+  }
   const response = await fetch("/api/stream", { headers: authHeaders(), signal });
   if (response.status === 401) throw new Error("unauthorized");
   if (!response.ok || !response.body) throw new Error("feed unavailable");
@@ -86,4 +98,37 @@ export async function openFeed(
       split = buffer.indexOf("\n\n");
     }
   }
+}
+
+function openEventSource(
+  onState: (snapshot: Snapshot) => void,
+  onLog: (event: NormEvent) => void,
+  signal: AbortSignal,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      resolve();
+      return;
+    }
+    const source = new EventSource("/api/stream");
+    let settled = false;
+    const finish = (error?: Error) => {
+      if (settled) return;
+      settled = true;
+      source.close();
+      if (error && !signal.aborted) reject(error);
+      else resolve();
+    };
+    signal.addEventListener("abort", () => finish());
+    source.addEventListener("state", (message) => {
+      const data = (message as MessageEvent).data as string;
+      onState(JSON.parse(data) as Snapshot);
+    });
+    source.addEventListener("log", (message) => {
+      const data = (message as MessageEvent).data as string;
+      const parsed = JSON.parse(data) as { event: NormEvent };
+      onLog(parsed.event);
+    });
+    source.onerror = () => finish(new Error("feed unavailable"));
+  });
 }

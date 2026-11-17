@@ -6,7 +6,7 @@ use crate::artifacts::list_files;
 use crate::derive::project;
 use crate::hub::{failed_workspace, Hub, Store};
 use crate::ledger::{discover, read_ledger, LedgerDump, LedgerError, LedgerSource};
-use crate::logs::{rules_from_config, TailSet};
+use crate::logs::{rules_from_config, LogWatch};
 use crate::model::{AppSnapshot, NormEvent, Workspace};
 use crate::timefmt::now_rfc3339;
 
@@ -29,7 +29,7 @@ pub fn spawn(
                 Vec::new()
             }
         };
-        let mut tails = TailSet::new(rules);
+        let mut tails = LogWatch::new(rules);
         let mut logs_buf: VecDeque<NormEvent> = VecDeque::new();
         let mut previous: HashMap<String, Workspace> = HashMap::new();
         let mut signatures: HashMap<String, String> = HashMap::new();
@@ -161,6 +161,6 @@ fn signature_of(workspace: &Workspace) -> String {
     serde_json::to_string(&copy).unwrap_or_default()
 }
 
-fn agents_seen(tails: &TailSet) -> Vec<String> {
+fn agents_seen(tails: &LogWatch) -> Vec<String> {
     tails.known_agents()
 }

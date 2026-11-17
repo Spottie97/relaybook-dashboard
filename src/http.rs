@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use axum::body::Body;
 use axum::extract::{Query, State};
-use axum::http::{header, StatusCode, Uri};
+use axum::http::{header, HeaderValue, StatusCode, Uri};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response, Sse};
 use axum::routing::get;
@@ -15,7 +15,7 @@ use serde_json::json;
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 use tokio_stream::wrappers::BroadcastStream;
 
-use crate::auth::Auth;
+use crate::auth::{Auth, BASIC_CHALLENGE};
 use crate::hub::Hub;
 use crate::model::Meta;
 
@@ -119,18 +119,30 @@ async fn require_auth(
     next: Next,
 ) -> Response {
     let path = request.uri().path();
-    if path == "/healthz" || path == "/api/meta" || !path.starts_with("/api") {
+    if !auth.required || path == "/healthz" {
+        return next.run(request).await;
+    }
+    // Token-only mode leaves the page and /api/meta open so the in-page token
+    // screen can load. Basic auth challenges every other route, including `/`.
+    if !auth.basic_enabled() && (path == "/api/meta" || !path.starts_with("/api")) {
         return next.run(request).await;
     }
     if auth.allows(request.headers()) {
         return next.run(request).await;
     }
-    (
+    let mut response = (
         StatusCode::UNAUTHORIZED,
         [(header::CACHE_CONTROL, "no-store")],
         Json(json!({ "ok": false, "error": "unauthorized" })),
     )
-        .into_response()
+        .into_response();
+    if auth.challenge_basic() {
+        response.headers_mut().insert(
+            header::WWW_AUTHENTICATE,
+            HeaderValue::from_static(BASIC_CHALLENGE),
+        );
+    }
+    response
 }
 
 async fn static_file(uri: Uri) -> Response {

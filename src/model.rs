@@ -1,7 +1,7 @@
 use serde::Serialize;
 use serde_json::Value;
 
-/// Normalized line from Claude Code, Cursor CLI, Codex CLI, Graphify, or Orca.
+/// One context file version: a Claude or Cursor result, a Codex review, a Graphify line, or a gate.
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct NormEvent {
     pub seq: u64,

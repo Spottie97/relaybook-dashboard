@@ -46,16 +46,10 @@ pub fn prepare() -> anyhow::Result<Demo> {
 pub fn spawn_replay(context_dir: PathBuf) {
     tokio::spawn(async move {
         tokio::time::sleep(Duration::from_secs(45)).await;
-        let script = replay_lines();
-        let mut index = 0;
+        let mut index = 0u64;
         loop {
             tokio::time::sleep(Duration::from_secs(2)).await;
-            let (file, line) = &script[index % script.len()];
-            let path = context_dir.join(file);
-            if let Ok(mut handle) = OpenOptions::new().create(true).append(true).open(&path) {
-                let stamped = line.replace("{{ts}}", &now());
-                let _ = writeln!(handle, "{stamped}");
-            }
+            let _ = replay_tick(&context_dir, index);
             index += 1;
         }
     });
@@ -242,127 +236,176 @@ fn steps(conn: &Connection, task_id: i64, items: &[(&str, bool)]) -> anyhow::Res
 }
 
 fn write_initial_logs(context: &Path) -> anyhow::Result<()> {
-    fs::write(context.join("orca-orchestrator.jsonl"), orca_log())?;
-    fs::write(context.join("claude-planner.jsonl"), claude_log())?;
-    fs::write(context.join("cursor-builder.jsonl"), cursor_log())?;
-    fs::write(context.join("codex-reviewer.jsonl"), codex_log())?;
-    fs::write(context.join("graphify-context.jsonl"), graphify_log())?;
+    let claude_ts = ago(700);
+    write_result(
+        context,
+        "claude-rev3-run.json",
+        &claude_ts,
+        "18",
+        "Plan accepted. The ledger stays the source of truth, and Cursor implements the read-only adapter.",
+        18_200,
+        4,
+        0.18,
+        "demo-claude-rev3",
+    )?;
+    fs::write(
+        context.join("claude-rev3-run.stderr"),
+        "note: sidecar, not the summary\n",
+    )?;
+    let cursor_ts = ago(90);
+    write_result(
+        context,
+        "m1-cursor-impl.json",
+        &cursor_ts,
+        "40",
+        "PY",
+        40_000,
+        6,
+        0.42,
+        "demo-cursor-m1",
+    )?;
+    fs::write(
+        context.join("m1-cursor-impl.result.md"),
+        "Opened the ledger read-only and checked user_version. The WAL is copied aside before the read.\n",
+    )?;
+    fs::write(
+        context.join("m1-cursor-impl-prompt.md"),
+        "Implement the read-only adapter. Do not write the ledger.\n",
+    )?;
+    let fix_ts = ago(400);
+    write_result(
+        context,
+        "r2-cursor-fix1.json",
+        &fix_ts,
+        "12",
+        "Fixed the torn read on the copied database.",
+        12_000,
+        2,
+        0.08,
+        "demo-cursor-r2",
+    )?;
+    fs::write(
+        context.join("r2-cursor-fix1.result.md"),
+        "Fixed the torn read on the copied database.\n",
+    )?;
+    let review = "# Verdict: accept\n\nThe copy does not write the source directory. No files were edited.\n";
+    fs::write(context.join("m1-codex-r1.md"), review)?;
+    write_meta(context, "m1-codex-r1", &ago(30), "8", "0")?;
+    fs::write(
+        context.join("codex-m1-run.log"),
+        "exec\nbash -lc 'cargo test'\nreading the diff\n",
+    )?;
+    write_meta(context, "codex-m1-run", &ago(120), "20", "0")?;
+    fs::write(
+        context.join("m1-graphify-postcommit.log"),
+        "post-commit index updated\n",
+    )?;
+    fs::write(
+        context.join("m1-graphify-update.log"),
+        "scanning\n\n---\n\nschema.rs owns SCHEMA_VERSION\nindex refreshed\n",
+    )?;
+    fs::write(
+        context.join("m1-cargo-test.log"),
+        "running 4 tests\ntest result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out\n",
+    )?;
+    write_meta(context, "m1-cargo-test", &ago(200), "6", "0")?;
+    fs::write(context.join("m1-verify.log"), "fmt check ok\n")?;
+    write_meta(context, "m1-verify", &ago(210), "2", "0")?;
     Ok(())
 }
 
-fn orca_log() -> String {
-    format!(
-        "{}\n{}\n",
-        line(
-            "orca",
-            ago(800),
-            "message",
-            "Objective: ship a watch-only view of the ledger. Cursor implements. Codex only reads."
-        ),
-        line(
-            "orca",
-            ago(500),
-            "status",
-            "Delegated ledger-adapter to Cursor. Holding review until the diff is quiet."
-        ),
-    )
+fn write_result(
+    context: &Path,
+    name: &str,
+    end_utc: &str,
+    elapsed_s: &str,
+    result: &str,
+    duration_ms: u64,
+    num_turns: u64,
+    cost: f64,
+    session_id: &str,
+) -> anyhow::Result<()> {
+    let body = serde_json::json!({
+        "type": "result",
+        "subtype": "success",
+        "is_error": false,
+        "result": result,
+        "duration_ms": duration_ms,
+        "num_turns": num_turns,
+        "total_cost_usd": cost,
+        "session_id": session_id,
+        "usage": {"input_tokens": 800, "output_tokens": 200}
+    });
+    fs::write(context.join(name), serde_json::to_string_pretty(&body)?)?;
+    let stem = name.rsplit_once('.').map(|(stem, _)| stem).unwrap_or(name);
+    write_meta(context, stem, end_utc, elapsed_s, "0")?;
+    Ok(())
 }
 
-fn claude_log() -> String {
-    format!(
-        "{}\n{}\n{}\n",
-        json_claude(
-            &ago(700),
-            "thinking",
-            "The ledger is the source of truth. A second store would drift."
-        ),
-        json_claude(
-            &ago(680),
-            "text",
-            "Plan is in the ledger. Cursor has the adapter. I am not claiming the build."
-        ),
-        format!(
-            r#"{{"type":"result","timestamp":"{}","subtype":"success","is_error":false,"result":"Plan accepted."}}"#,
-            ago(660)
-        ),
-    )
+fn write_meta(
+    context: &Path,
+    stem: &str,
+    end_utc: &str,
+    elapsed_s: &str,
+    exit: &str,
+) -> anyhow::Result<()> {
+    fs::write(
+        context.join(format!("{stem}.meta")),
+        format!("exit={exit}\nend_utc={end_utc}\nelapsed_s={elapsed_s}\n"),
+    )?;
+    Ok(())
 }
 
-fn cursor_log() -> String {
-    format!(
-        "{}\n{}\n",
-        format!(
-            r#"{{"type":"assistant","timestamp":"{}","message":{{"content":[{{"type":"text","text":"Opening the ledger read-only and checking user_version."}}]}}}}"#,
-            ago(90)
-        ),
-        format!(
-            r#"{{"type":"tool_call","timestamp":"{}","subtype":"started","tool_call":{{"shellToolCall":{{"args":{{"command":"cargo test --test adapter"}}}}}}}}"#,
-            ago(40)
-        ),
-    )
-}
-
-fn codex_log() -> String {
-    format!(
-        "{}\n",
-        format!(
-            r#"{{"type":"item.completed","timestamp":"{}","item":{{"type":"reasoning","text":"The copy must not write the source directory. I will read the diff only."}}}}"#,
-            ago(300)
-        )
-    )
-}
-
-fn graphify_log() -> String {
-    format!(
-        "{}\n",
-        format!(
-            r#"{{"type":"query","timestamp":"{}","query":"schema adapter","summary":"schema.rs owns SCHEMA_VERSION"}}"#,
-            ago(200)
-        )
-    )
-}
-
-fn json_claude(ts: &str, kind: &str, text: &str) -> String {
-    if kind == "thinking" {
-        format!(
-            r#"{{"type":"assistant","timestamp":"{ts}","message":{{"content":[{{"type":"thinking","thinking":"{text}"}}]}}}}"#
-        )
-    } else {
-        format!(
-            r#"{{"type":"assistant","timestamp":"{ts}","message":{{"content":[{{"type":"text","text":"{text}"}}]}}}}"#
-        )
+fn replay_tick(dir: &Path, index: u64) -> std::io::Result<()> {
+    match index % 4 {
+        0 => {
+            let mut file = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(dir.join("m1-graphify-update.log"))?;
+            writeln!(file, "index touched {index}")?;
+        }
+        1 => {
+            fs::write(
+                dir.join("m1-cursor-fix2.json"),
+                "{\"type\":\"result\",\"result\":",
+            )?;
+        }
+        2 => {
+            let ts = now();
+            let body = serde_json::json!({
+                "type": "result",
+                "subtype": "success",
+                "is_error": false,
+                "result": "Fix applied. The read stays on the copied database.",
+                "duration_ms": 2200,
+                "num_turns": 1,
+                "total_cost_usd": 0.04,
+                "session_id": "demo-cursor-fix2"
+            });
+            fs::write(dir.join("m1-cursor-fix2.json"), body.to_string())?;
+            fs::write(
+                dir.join("m1-cursor-fix2.meta"),
+                format!("exit=0\nend_utc={ts}\nelapsed_s=2\n"),
+            )?;
+            fs::write(
+                dir.join("m1-cursor-fix2.result.md"),
+                "Fix applied. The read stays on the copied database.\n",
+            )?;
+        }
+        _ => {
+            let ts = now();
+            fs::write(
+                dir.join("m1-codex-r2.md"),
+                "# Verdict: accept\n\nSecond pass. Still read-only. No files edited.\n",
+            )?;
+            fs::write(
+                dir.join("m1-codex-r2.meta"),
+                format!("exit=0\nend_utc={ts}\nelapsed_s=5\n"),
+            )?;
+        }
     }
-}
-
-fn line(kind: &str, ts: String, event_type: &str, summary: &str) -> String {
-    let _ = kind;
-    serde_json::json!({
-        "type": event_type,
-        "timestamp": ts,
-        "summary": summary,
-    })
-    .to_string()
-}
-
-fn replay_lines() -> Vec<(&'static str, &'static str)> {
-    vec![
-        (
-            "cursor-builder.jsonl",
-            r#"{"type":"assistant","timestamp":"{{ts}}","message":{"content":[{"type":"text","text":"Reading the next migration edge."}]}}"#,
-        ),
-        (
-            "cursor-builder.jsonl",
-            r#"{"type":"tool_call","timestamp":"{{ts}}","subtype":"completed","tool_call":{"shellToolCall":{"args":{"command":"cargo test --test adapter"},"result":{"output":"ok"}}}}"#,
-        ),
-        (
-            "graphify-context.jsonl",
-            r#"{"type":"status","timestamp":"{{ts}}","summary":"Index is current. No new files."}"#,
-        ),
-        (
-            "codex-reviewer.jsonl",
-            r#"{"type":"item.completed","timestamp":"{{ts}}","item":{"type":"agent_message","text":"Still waiting on the unreviewed report. No files edited."}}"#,
-        ),
-    ]
+    Ok(())
 }
 
 fn ago(secs: u64) -> String {
