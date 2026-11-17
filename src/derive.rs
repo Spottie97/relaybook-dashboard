@@ -295,7 +295,10 @@ fn agent_cards(
                 .iter()
                 .filter(|task| owner_is(id, task.claimed_by.as_deref()))
                 .collect();
-            let latest = logs.iter().rev().find(|event| event.agent == *id);
+            let latest = logs
+                .iter()
+                .rev()
+                .find(|event| event.agent == *id && event.kind != "transcript");
             let log_present = log_agents.iter().any(|agent| agent == id) || latest.is_some();
             let mut status = agent_status(id, &mine, active, latest);
             if *id == "codex" && unreviewed && status == "idle" {
@@ -340,7 +343,10 @@ fn agent_status(
     run: Option<&RunView>,
     latest: Option<&NormEvent>,
 ) -> String {
-    if latest.is_some_and(|event| event.kind == "error") {
+    if latest.is_some_and(|event| {
+        event.kind == "error"
+            || (event.kind == "gate" && event.detail.get("ok") == Some(&Value::Bool(false)))
+    }) {
         return "error".to_string();
     }
     if mine.iter().any(|task| task.status == "claimed") {
@@ -473,12 +479,10 @@ fn timeline(tasks: &[TaskView], runs: &[RunView], logs: &[NormEvent]) -> Vec<Tim
         });
     }
     for event in logs {
-        if event.agent != "orca" && event.agent != "claude" {
+        if event.agent != "claude" || event.kind == "transcript" {
             continue;
         }
-        let kind = if event.agent == "claude" && event.kind == "thinking" {
-            "thinking"
-        } else if event.kind == "thinking" {
+        let kind = if event.kind == "thinking" {
             "thinking"
         } else {
             "message"
@@ -486,12 +490,7 @@ fn timeline(tasks: &[TaskView], runs: &[RunView], logs: &[NormEvent]) -> Vec<Tim
         items.push(TimelineItem {
             id: format!("log-{}", event.seq),
             ts: event.ts.clone(),
-            actor: if event.agent == "orca" {
-                "Orca"
-            } else {
-                "Claude"
-            }
-            .to_string(),
+            actor: "Claude".to_string(),
             kind: kind.to_string(),
             text: event.summary.clone(),
             detail: event
@@ -580,6 +579,48 @@ mod tests {
         assert_eq!(claude.progress, Some(100));
         assert_eq!(codex.status, "idle");
         assert_eq!(codex.progress, None);
+    }
+
+    #[test]
+    fn codex_card_uses_the_review_and_skips_the_run_transcript() {
+        let transcript = NormEvent {
+            seq: 2,
+            ts: "2026-11-17T18:00:00Z".to_string(),
+            agent: "codex".to_string(),
+            kind: "transcript".to_string(),
+            summary: "m1 · run transcript".to_string(),
+            detail: serde_json::json!({ "text": "bash -lc 'cargo test'" }),
+            source: "codex-m1-run.log".to_string(),
+        };
+        let review = NormEvent {
+            seq: 1,
+            ts: "2026-11-17T17:00:00Z".to_string(),
+            agent: "codex".to_string(),
+            kind: "review".to_string(),
+            summary: "m1 · Verdict: accept".to_string(),
+            detail: serde_json::json!({ "text": "The copy does not write." }),
+            source: "m1-codex-r1.md".to_string(),
+        };
+        let derived = project(
+            "demo",
+            &empty_dump(),
+            &[review, transcript],
+            &["codex".to_string()],
+            0,
+            &[],
+        );
+        let codex = derived
+            .workspace
+            .agents
+            .iter()
+            .find(|agent| agent.id == "codex")
+            .unwrap();
+        assert_eq!(codex.latest.as_deref(), Some("m1 · Verdict: accept"));
+        assert!(derived
+            .workspace
+            .timeline
+            .iter()
+            .all(|item| item.actor != "Codex"));
     }
 
     fn empty_dump() -> LedgerDump {

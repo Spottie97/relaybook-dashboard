@@ -53,7 +53,14 @@ impl Auth {
     pub fn token_enabled(&self) -> bool {
         self.token.is_some()
     }
+
+    /// Browser sign-in is on, so unauthenticated responses carry a Basic challenge.
+    pub fn challenge_basic(&self) -> bool {
+        self.required && self.basic_enabled()
+    }
 }
+
+pub const BASIC_CHALLENGE: &str = "Basic realm=\"relaybook-dashboard\", charset=\"UTF-8\"";
 
 fn blank(value: Option<String>) -> Option<String> {
     value.and_then(|text| {
@@ -86,7 +93,9 @@ fn basic_ok(header: &str, user: &str, password: &str) -> bool {
     let Some((got_user, got_password)) = decoded.split_once(':') else {
         return false;
     };
-    ct_eq(got_user, user) && ct_eq(got_password, password)
+    let user_ok = ct_eq(got_user, user);
+    let password_ok = ct_eq(got_password, password);
+    user_ok & password_ok
 }
 
 fn ct_eq(left: &str, right: &str) -> bool {
@@ -127,5 +136,13 @@ mod tests {
             HeaderValue::from_str(&format!("Basic {encoded}")).unwrap(),
         );
         assert!(auth.allows(&headers));
+        for presented in ["ops:no", "no:pw", "ops:pw-extra"] {
+            let encoded = base64::engine::general_purpose::STANDARD.encode(presented);
+            headers.insert(
+                axum::http::header::AUTHORIZATION,
+                HeaderValue::from_str(&format!("Basic {encoded}")).unwrap(),
+            );
+            assert!(!auth.allows(&headers), "{presented}");
+        }
     }
 }

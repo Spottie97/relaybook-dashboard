@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
-import { getMeta, getState, loadCreds, openFeed, saveCreds } from "./api";
+import { getMeta, getState, loadCreds, openFeed, saveCreds, setBrowserAuth } from "./api";
 import type { Creds, Meta, NormEvent, Snapshot, Workspace } from "./types";
 
 type Feed = {
@@ -46,7 +46,8 @@ export function FeedProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const locked = Boolean(meta?.auth_required && !creds);
+  if (meta?.auth_basic) setBrowserAuth(true);
+  const locked = Boolean(meta?.auth_required && !meta.auth_basic && !creds);
 
   useEffect(() => {
     if (!meta || locked) return;

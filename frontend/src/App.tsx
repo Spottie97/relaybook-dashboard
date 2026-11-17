@@ -34,7 +34,7 @@ function Shell() {
   if (!feed.meta) {
     return <div className="gate"><p>Connecting to the feed…</p></div>;
   }
-  if (feed.meta.auth_required && !feed.creds) {
+  if (feed.meta.auth_required && !feed.meta.auth_basic && !feed.creds) {
     return <Gate />;
   }
 
@@ -147,7 +147,9 @@ function Overview() {
 }
 
 function AgentGrid() {
-  const { workspace } = useFeed();
+  const { workspace, logs } = useFeed();
+  const review = [...logs].reverse().find((event) => event.agent === "codex" && event.kind === "review");
+  const reviewText = typeof review?.detail.text === "string" ? review.detail.text : "";
   return (
     <div className="grid">
       {(workspace?.agents ?? []).map((agent) => (
@@ -168,6 +170,7 @@ function AgentGrid() {
             </>
           )}
           <p className="latest">Latest: {agent.latest ?? "—"} {agent.latest_ts ? agent.latest_ts.slice(11, 19) : ""}</p>
+          {agent.id === "codex" && reviewText ? <pre className="review">{reviewText}</pre> : null}
         </Link>
       ))}
     </div>

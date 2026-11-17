@@ -53,7 +53,7 @@ struct Cli {
     #[arg(long = "ledger", env = "LEDGER_DIR")]
     ledger: Vec<PathBuf>,
 
-    /// Directory of agent JSON logs.
+    /// Flat directory of agent run files (Claude and Cursor JSON, Codex reviews, Graphify and gate logs).
     #[arg(long = "logs", env = "CONTEXT_DIR")]
     logs: Option<PathBuf>,
 

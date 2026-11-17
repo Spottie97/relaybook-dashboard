@@ -141,6 +141,16 @@ h1 { font-size: 22px; font-weight: 500; margin: 0; letter-spacing: -0.02em; }
 .bar i { display: block; height: 100%; background: #4ade80; }
 .pct { float: right; color: #8b969e; font-size: 11px; margin-top: 6px; }
 .latest { clear: both; color: #8b969e; font-size: 11px; margin: 8px 0 0; }
+.card .review, .detail.review {
+  margin: 8px 0 0;
+  color: #d5dbe0;
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  font-family: inherit;
+}
+.card .review { max-height: 8.5em; overflow: auto; }
+.log-line .toggle { grid-column: 1 / -1; justify-self: start; }
 
 .pill { font-size: 10px; letter-spacing: 0.08em; border: 1px solid currentColor; padding: 2px 6px; white-space: nowrap; }
 .pill.running, .pill.complete, .pill.done { color: #4ade80; }

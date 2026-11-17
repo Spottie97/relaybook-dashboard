@@ -43,7 +43,7 @@ Relaybook has no chat table. A message is one of the commands the CLI already al
 - guidance for the executor: `relaybook task create`, `relaybook step add`, `relaybook decision log`
 - a note back to the planner: `relaybook report note --by <operator> --text "..."`
 
-v2 does not write prompt files, does not append to the JSON logs, and does not spawn `claude`, `cursor`, `codex`, `orca`, or any other agent. If the text does not map to one of those commands, the UI keeps it unsent.
+v2 does not write prompt files, does not append to the context run files, and does not spawn `claude`, `cursor`, `codex`, `orca`, or any other agent. If the text does not map to one of those commands, the UI keeps it unsent.
 
 ## What stays impossible
 

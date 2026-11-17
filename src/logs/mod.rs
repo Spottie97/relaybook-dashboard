@@ -1,7 +1,6 @@
-mod parse;
+mod adapt;
 mod rules;
-mod tail;
+mod watch;
 
-pub use parse::parse_line;
 pub use rules::{rules_from_config, Rule};
-pub use tail::TailSet;
+pub use watch::LogWatch;

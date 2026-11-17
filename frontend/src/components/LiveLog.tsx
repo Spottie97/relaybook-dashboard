@@ -4,7 +4,7 @@ import { useFeed } from "../feed";
 import { agentColor, hm, roleLabel } from "../format";
 import type { NormEvent } from "../types";
 
-const FILTERS = ["all", "claude", "cursor", "codex", "graphify", "orca"];
+const FILTERS = ["all", "claude", "cursor", "codex", "graphify"];
 
 export function LiveLog() {
   const { logs } = useFeed();
@@ -36,7 +36,7 @@ export function LiveLog() {
         </button>
       </div>
       <div className="log" ref={box}>
-        {shown.length === 0 ? <div className="empty">No JSON logs under the logs directory yet.</div> : null}
+        {shown.length === 0 ? <div className="empty">No run files under the logs directory yet.</div> : null}
         {shown.map((event) => (
           <LogLine key={event.seq} event={event} open={open === event.seq} onToggle={() => setOpen(open === event.seq ? null : event.seq)} />
         ))}
@@ -46,12 +46,29 @@ export function LiveLog() {
 }
 
 function LogLine({ event, open, onToggle }: { event: NormEvent; open: boolean; onToggle: () => void }) {
+  const transcript = event.kind === "transcript";
+  const review = event.kind === "review";
+  const text = typeof event.detail.text === "string" ? event.detail.text : "";
   return (
-    <div className="log-line" onClick={onToggle}>
+    <div className="log-line" onClick={transcript ? undefined : onToggle}>
       <time>{hm(event.ts)}</time>
       <span style={{ color: agentColor(event.agent) }}>[{roleLabel(event.agent)}]</span>
       <span>{event.summary}</span>
-      {open ? <pre className="detail">{detailText(event)}</pre> : null}
+      {review && text ? <pre className="detail review">{text}</pre> : null}
+      {transcript ? (
+        <button
+          type="button"
+          className="toggle"
+          onClick={(click) => {
+            click.stopPropagation();
+            onToggle();
+          }}
+        >
+          {open ? "Hide transcript" : "Show transcript"}
+        </button>
+      ) : null}
+      {open && transcript ? <pre className="detail">{text}</pre> : null}
+      {open && !transcript && !review ? <pre className="detail">{detailText(event)}</pre> : null}
     </div>
   );
 }
