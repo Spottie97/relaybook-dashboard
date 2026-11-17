@@ -152,11 +152,6 @@ fn read_sources(input: &TickInput) -> Vec<(LedgerSource, Result<LedgerDump, Ledg
 fn error_workspace(source: &LedgerSource, err: &LedgerError, logs: &[NormEvent]) -> Workspace {
     let mut workspace = failed_workspace(&source.id, &err.public_message());
     workspace.logs = logs.to_vec();
-    if matches!(err, LedgerError::UnsupportedSchema { .. }) {
-        if let LedgerError::UnsupportedSchema { found, .. } = err {
-            workspace.schema_version = Some(*found);
-        }
-    }
     workspace
 }
 

@@ -2,7 +2,7 @@
 
 ## Relaybook schema this build reads
 
-Public `main` of [relaybook](https://github.com/Spottie97/relaybook) at `c25c29f55613228889099b59e1847ea6bf1c68b7` (tag v0.3.3, 2026-11-12) sets `SCHEMA_VERSION` to **6** in `crates/core/src/schema.rs`. `PRAGMA user_version` is that number. The published ledger doc still says the same thing. This dashboard accepts version 6 only. Version 5 or 8 fails the read with an explicit error so a later reader can be added in `src/ledger` without touching the HTTP layer.
+Public `main` of [relaybook](https://github.com/Spottie97/relaybook) at `c25c29f55613228889099b59e1847ea6bf1c68b7` (tag v0.3.3, 2026-11-12) sets `SCHEMA_VERSION` to **6** in `crates/core/src/schema.rs`. `PRAGMA user_version` is that number. The published ledger doc still says the same thing. Version 6 is the fully mapped reader (`src/ledger/v6.rs`). Any other `user_version`, including the unpushed v7 and v8 ledgers, still opens. The UI stays up in degraded mode: tasks and events only, columns chosen with `PRAGMA table_info`, and a banner that reads `unsupported schema vN`. A mapped reader is one new module and one arm in `read_ledger`.
 
 The SQL under `fixtures/relaybook/` is copied from that commit (the `SCHEMA` constant and the migration strings, plus the v4 to v5 `ALTER`s in `migrate.rs`). Tests build a database by running those statements, then read it back through the same adapter the server uses.
 

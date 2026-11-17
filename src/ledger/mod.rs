@@ -1,3 +1,4 @@
+pub(crate) mod degraded;
 mod discover;
 mod fixture;
 mod open;
@@ -19,6 +20,9 @@ pub const SUPPORTED_SCHEMA_VERSION: i64 = 6;
 #[derive(Debug, Clone)]
 pub struct LedgerDump {
     pub schema_version: i64,
+    /// True when `user_version` is not a fully mapped schema. Only tasks and
+    /// events are filled, from whatever columns `PRAGMA table_info` reports.
+    pub degraded: bool,
     pub tasks: Vec<TaskRow>,
     pub steps: Vec<StepRow>,
     pub decisions: Vec<DecisionRow>,
@@ -116,8 +120,6 @@ pub struct RunRow {
 
 #[derive(Debug, thiserror::Error)]
 pub enum LedgerError {
-    #[error("schema version {found} is not supported (this build reads {supported})")]
-    UnsupportedSchema { found: i64, supported: i64 },
     #[error("ledger is busy")]
     Busy,
     #[error("ledger snapshot was torn")]
@@ -136,9 +138,6 @@ impl LedgerError {
     /// Text safe to show in the UI. SQLite messages sometimes contain paths.
     pub fn public_message(&self) -> String {
         match self {
-            Self::UnsupportedSchema { found, supported } => {
-                format!("schema version {found} is not supported (this build reads {supported})")
-            }
             Self::Busy => "ledger is busy, will retry".to_string(),
             Self::Torn => "ledger snapshot was torn, will retry".to_string(),
             Self::Unreadable => "ledger file is not readable".to_string(),

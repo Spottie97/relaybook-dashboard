@@ -96,6 +96,7 @@ export type Workspace = {
   id: string;
   label: string;
   schema_version: number | null;
+  schema_warning: string | null;
   ledger_ok: boolean;
   ledger_error: string | null;
   stale: boolean;

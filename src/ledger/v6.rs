@@ -8,6 +8,7 @@ use super::{
 pub fn dump(conn: &Connection) -> Result<LedgerDump, LedgerError> {
     Ok(LedgerDump {
         schema_version: 6,
+        degraded: false,
         tasks: tasks(conn)?,
         steps: steps(conn)?,
         decisions: decisions(conn)?,

@@ -2,9 +2,9 @@ use std::fs;
 
 use rusqlite::{params, Connection};
 
+use relaybook_dashboard::derive::project;
 use relaybook_dashboard::ledger::{
-    apply_historical_migrations, fixture_current, read_ledger, LedgerError,
-    SUPPORTED_SCHEMA_VERSION,
+    apply_historical_migrations, fixture_current, read_ledger, SUPPORTED_SCHEMA_VERSION,
 };
 
 #[test]
@@ -94,20 +94,125 @@ fn a_new_ledger_uses_the_current_schema_constant() {
 }
 
 #[test]
-fn a_future_schema_version_is_rejected() {
+fn unknown_schema_versions_read_tasks_and_events_only() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("ledger.db");
     {
         let conn = Connection::open(&path).unwrap();
-        fixture_current(&conn).unwrap();
+        conn.execute_batch(
+            "
+            CREATE TABLE tasks (
+                extra_note TEXT,
+                title TEXT NOT NULL,
+                id INTEGER PRIMARY KEY,
+                slug TEXT NOT NULL,
+                status TEXT,
+                claimed_by TEXT
+            );
+            CREATE TABLE events (
+                payload TEXT,
+                kind TEXT NOT NULL,
+                id INTEGER,
+                ts TEXT
+            );
+            CREATE TABLE reports (
+                id INTEGER PRIMARY KEY,
+                body TEXT NOT NULL
+            );
+            INSERT INTO tasks (extra_note, title, id, slug, status, claimed_by)
+            VALUES ('ignore-me', 'Ship the next schema', 4, 'ship-v8', 'claimed', 'cursor');
+            INSERT INTO events (payload, kind, id, ts)
+            VALUES ('{\"slug\":\"ship-v8\"}', 'task_created', 9, '2026-11-17T00:00:00Z');
+            INSERT INTO reports (body) VALUES ('must stay hidden');
+            ",
+        )
+        .unwrap();
         conn.pragma_update(None, "user_version", 8).unwrap();
     }
-    let err = read_ledger(&path).unwrap_err();
-    match err {
-        LedgerError::UnsupportedSchema { found, supported } => {
-            assert_eq!(found, 8);
-            assert_eq!(supported, 6);
-        }
-        other => panic!("unexpected {other}"),
+    let before = fs::read(&path).unwrap();
+    let dump = read_ledger(&path).expect("degraded read");
+    assert_eq!(fs::read(&path).unwrap(), before);
+    assert!(dump.degraded);
+    assert_eq!(dump.schema_version, 8);
+    assert!(dump.steps.is_empty());
+    assert!(dump.reports.is_empty());
+    assert!(dump.runs.is_empty());
+    assert!(dump.settings.is_empty());
+    assert_eq!(dump.tasks.len(), 1);
+    assert_eq!(dump.tasks[0].id, 4);
+    assert_eq!(dump.tasks[0].slug, "ship-v8");
+    assert_eq!(dump.tasks[0].title, "Ship the next schema");
+    assert_eq!(dump.tasks[0].status, "claimed");
+    assert_eq!(dump.tasks[0].claimed_by.as_deref(), Some("cursor"));
+    assert!(dump.tasks[0].run_id.is_none());
+    assert_eq!(dump.events[0].id, 9);
+    assert_eq!(dump.events[0].kind, "task_created");
+    assert_eq!(dump.events[0].payload["slug"], "ship-v8");
+
+    let view = project("ledger", &dump, &[], &[], 0, &[]);
+    assert_eq!(
+        view.workspace.schema_warning.as_deref(),
+        Some("unsupported schema v8")
+    );
+    assert!(view.workspace.ledger_ok);
+    assert!(!view.workspace.health_ok);
+    assert_eq!(view.workspace.tasks[0].slug, "ship-v8");
+    assert_eq!(
+        view.workspace
+            .agents
+            .iter()
+            .find(|agent| agent.id == "cursor")
+            .unwrap()
+            .status,
+        "running"
+    );
+}
+
+#[test]
+fn schema_v7_keeps_recognized_columns_and_skips_new_ones() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("ledger.db");
+    {
+        let conn = Connection::open(&path).unwrap();
+        conn.execute_batch(
+            "
+            CREATE TABLE tasks (
+                id INTEGER PRIMARY KEY,
+                slug TEXT NOT NULL,
+                title TEXT NOT NULL,
+                status TEXT NOT NULL,
+                claimed_by TEXT,
+                created_at TEXT,
+                updated_at TEXT,
+                priority TEXT
+            );
+            CREATE TABLE events (
+                id INTEGER PRIMARY KEY,
+                ts TEXT,
+                kind TEXT,
+                payload TEXT
+            );
+            INSERT INTO tasks (slug, title, status, claimed_by, created_at, updated_at, priority)
+            VALUES ('adapt', 'Adapt the reader', 'open', NULL, '2026-11-17T01:00:00Z', '2026-11-17T01:00:00Z', 'high');
+            INSERT INTO events (ts, kind, payload)
+            VALUES ('2026-11-17T01:00:00Z', 'task_created', 'not-json');
+            ",
+        )
+        .unwrap();
+        conn.pragma_update(None, "user_version", 7).unwrap();
     }
+    let dump = read_ledger(&path).unwrap();
+    assert!(dump.degraded);
+    assert_eq!(dump.schema_version, 7);
+    assert_eq!(dump.tasks[0].slug, "adapt");
+    assert_eq!(dump.tasks[0].created_at, "2026-11-17T01:00:00Z");
+    assert!(dump.tasks[0].claimed_by.is_none());
+    assert_eq!(dump.events[0].kind, "task_created");
+    assert_eq!(dump.events[0].payload, "not-json");
+    let view = project("ledger", &dump, &[], &[], 0, &[]);
+    assert_eq!(
+        view.workspace.schema_warning.as_deref(),
+        Some("unsupported schema v7")
+    );
+    assert_eq!(view.workspace.health_label, "unsupported schema v7");
 }

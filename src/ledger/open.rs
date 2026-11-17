@@ -59,13 +59,12 @@ pub fn read_ledger(source: &Path) -> Result<LedgerDump, LedgerError> {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .map_err(classify)?;
-        if version != SUPPORTED_SCHEMA_VERSION {
-            return Err(LedgerError::UnsupportedSchema {
-                found: version,
-                supported: SUPPORTED_SCHEMA_VERSION,
-            });
+        // Fully mapped schemas get their own arm. Anything else is read
+        // best-effort so a newer ledger still renders.
+        match version {
+            SUPPORTED_SCHEMA_VERSION => v6::dump(conn),
+            other => super::degraded::dump(conn, other),
         }
-        v6::dump(conn)
     })
 }
 

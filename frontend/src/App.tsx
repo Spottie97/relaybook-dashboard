@@ -39,7 +39,15 @@ function Shell() {
   }
 
   const health = feed.workspace?.health_label ?? "Waiting for a ledger";
-  const healthClass = !feed.workspace ? "warn" : !feed.workspace.ledger_ok || feed.workspace.stale ? "bad" : feed.workspace.logs_found === 0 ? "warn" : "ok";
+  const healthClass = !feed.workspace
+    ? "warn"
+    : feed.workspace.schema_warning
+      ? "warn"
+      : !feed.workspace.ledger_ok || feed.workspace.stale
+        ? "bad"
+        : feed.workspace.logs_found === 0
+          ? "warn"
+          : "ok";
   const crumb = overview ? "command-center" : location.pathname.replace("/", "");
 
   return (
@@ -78,6 +86,7 @@ function Shell() {
           </div>
         </aside>
         <main className="main">
+          {feed.workspace?.schema_warning ? <div className="banner">{feed.workspace.schema_warning}</div> : null}
           {feed.banner ? <div className="banner">{feed.banner}</div> : null}
           <Routes>
             <Route path="/" element={<Overview />} />

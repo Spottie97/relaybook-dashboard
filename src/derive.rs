@@ -66,22 +66,31 @@ pub fn project(
         .iter()
         .map(|task| (task.id, task.title.clone()))
         .collect();
+    let schema_warning = if dump.degraded {
+        Some(crate::ledger::degraded::banner(dump.schema_version))
+    } else {
+        None
+    };
+    let health_label = if let Some(warning) = &schema_warning {
+        warning.clone()
+    } else if logs_found > 0 {
+        "All systems operational".to_string()
+    } else {
+        "Ledger readable, no logs found".to_string()
+    };
     Derived {
         workspace: Workspace {
             id: id.to_string(),
             label: id.to_string(),
             schema_version: Some(dump.schema_version),
+            schema_warning,
             ledger_ok: true,
             ledger_error: None,
             stale: false,
             logs_found,
             unmapped_logs: unmapped,
-            health_ok: true,
-            health_label: if logs_found > 0 {
-                "All systems operational".to_string()
-            } else {
-                "Ledger readable, no logs found".to_string()
-            },
+            health_ok: !dump.degraded,
+            health_label,
             settings,
             mission,
             stats: Stats {
@@ -576,6 +585,7 @@ mod tests {
     fn empty_dump() -> LedgerDump {
         LedgerDump {
             schema_version: 6,
+            degraded: false,
             tasks: Vec::new(),
             steps: Vec::new(),
             decisions: Vec::new(),
